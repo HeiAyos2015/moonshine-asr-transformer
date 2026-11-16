@@ -1,0 +1,9 @@
+streamlit>=1.40
+transformers>=4.48
+torch
+librosa
+soundfile
+jiwer
+matplotlib
+numpy
+pandas
