@@ -9,7 +9,7 @@
 
 Este proyecto implementa el proceso de **inferencia** de **Moonshine**, una familia de modelos de reconocimiento automático de voz (ASR) basada en un **Transformer encoder–decoder**, usando sus pesos preentrenados. El encoder procesa la señal de audio cruda y el decoder genera la transcripción token por token mediante **cross-attention**. Además de transcribir, el proyecto analiza el modelo por dentro: la creación de los tensores **Q, K y V**, y los mapas de atención del encoder, del decoder (con máscara causal) y de la cross-attention, que muestran cómo el modelo alinea cada palabra con un fragmento del audio.
 
-Se desarrolló un notebook de análisis y una **aplicación interactiva en Streamlit** que permite subir o grabar un audio y observar la inferencia. En una muestra de LibriSpeech, el modelo **Moonshine Base** obtuvo un **WER de X,XX %** y un **RTF de 0,064** en GPU (unas 15 veces más rápido que el tiempo real), frente al WER de 3,23 % que reporta el artículo sobre el conjunto completo *test-clean*. En un computador personal **sin GPU**, la app transcribió una nota de voz con un **RTF de 0,111** (unas 9 veces más rápido que el tiempo real). Una prueba con un **hablante no nativo** (francófono) mostró que el modelo entiende casi toda la frase, pero es sensible al acento.
+Se desarrolló un notebook de análisis y una **aplicación interactiva en Streamlit** que permite subir o grabar un audio y observar la inferencia. En una muestra de LibriSpeech, el modelo **Moonshine Base** obtuvo un **WER de 5,83 %** y un **RTF de 0,069** en GPU (unas 14 veces más rápido que el tiempo real), frente al WER de 3,23 % que reporta el artículo sobre el conjunto completo *test-clean*. En un computador personal **sin GPU**, la app transcribió una nota de voz con un **RTF de 0,111** (unas 9 veces más rápido que el tiempo real). Una prueba con un **hablante no nativo** (francófono) mostró que el modelo entiende casi toda la frase, pero es sensible al acento.
 
 ---
 
@@ -197,16 +197,17 @@ La transcripción es correcta; las diferencias son solo de formato (mayúsculas,
 
 | Métrica | Artículo (Moonshine Base) | Nuestra prueba |
 |---|---|---|
-| WER en LibriSpeech | 3,23 % (*test-clean*, 2.620 audios) | **X,XX %** (30 audios) |
-| Velocidad con GPU | Hasta 3× menos latencia que Whisper | **RTF = 0,064** en GPU T4 de Colab (≈ 15× más rápido que el tiempo real) |
+| WER en LibriSpeech | 3,23 % (*test-clean*, 2.620 audios) | **5,83 %** (30 audios) |
+| Velocidad con GPU | Hasta 3× menos latencia que Whisper | **RTF = 0,069** en GPU T4 de Colab (≈ 14× más rápido que el tiempo real) |
 | Velocidad sin GPU | — | **RTF = 0,111** en CPU de un computador personal (≈ 9× más rápido que el tiempo real) |
 
 ![WER por audio](imagenes/wer_por_audio.png)
 
 **Análisis:**
-- Cerca del **43 %** de los audios se transcribió **sin ningún error**.
+- **16 de los 30 audios (53 %)** se transcribieron **sin ningún error** (los que no tienen barra en la gráfica).
 - Los valores más altos de WER por audio aparecen en **frases cortas**, donde un solo error pesa mucho en el porcentaje (1 error en 4 palabras = 25 %).
-- Nuestro WER es mayor que el del artículo porque la muestra es pequeña y de otra partición, y porque la **normalización del texto** influye ("Mr." vs. "mister").
+- La **normalización del texto** es clave: sin convertir abreviaturas, el WER era de **7,29 %**, porque el modelo escribe "Mr." y LibriSpeech "mister". Al normalizar, bajó a **5,83 %**, ya que esas diferencias eran solo de formato.
+- Nuestro WER sigue siendo mayor que el del artículo (3,23 %) porque la muestra es pequeña (30 audios) y de otra partición de LibriSpeech, donde un solo error pesa mucho en el porcentaje.
 - El error más interesante fue **"roast beef" → "rose beef"**: dos palabras que suenan casi igual. Es un error **acústico** en el que al modelo le faltó contexto.
 
 ### 6.4 Prueba propia con un hablante no nativo
@@ -251,6 +252,10 @@ Se probó la app con una **nota de voz de WhatsApp** (formato .ogg, 6,69 s) grab
 | **Promedio** | 10,32 | **10,07** |
 
 *WER (%) — Tabla 2 del artículo.* Moonshine Base iguala o supera en promedio a Whisper base.en con menos parámetros (61,5 M frente a 72,6 M).
+
+![Comparación del artículo](imagenes/comparacion_articulo.png)
+
+Moonshine Base es mejor en 4 de los 8 datasets (AMI, GigaSpeech y las dos particiones de LibriSpeech) y peor en Earnings22, donde abundan audios de menos de 1 segundo ("Yes.", "Okay."), una limitación que reconocen los autores.
 
 ### 6.6 Capturas de la aplicación
 
