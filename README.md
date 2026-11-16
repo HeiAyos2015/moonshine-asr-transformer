@@ -9,7 +9,7 @@
 
 Este proyecto implementa el proceso de **inferencia** de **Moonshine**, una familia de modelos de reconocimiento automático de voz (ASR) basada en un **Transformer encoder–decoder**, usando sus pesos preentrenados. El encoder procesa la señal de audio cruda y el decoder genera la transcripción token por token mediante **cross-attention**. Además de transcribir, el proyecto analiza el modelo por dentro: la creación de los tensores **Q, K y V**, y los mapas de atención del encoder, del decoder (con máscara causal) y de la cross-attention, que muestran cómo el modelo alinea cada palabra con un fragmento del audio.
 
-Se desarrolló un notebook de análisis y una **aplicación interactiva en Streamlit** que permite subir o grabar un audio y observar la inferencia. En una muestra de LibriSpeech, el modelo **Moonshine Base** obtuvo un **WER de X,XX %** y un **RTF de 0,064** en GPU (unas 15 veces más rápido que el tiempo real), frente al WER de 3,23 % que reporta el artículo sobre el conjunto completo *test-clean*.
+Se desarrolló un notebook de análisis y una **aplicación interactiva en Streamlit** que permite subir o grabar un audio y observar la inferencia. En una muestra de LibriSpeech, el modelo **Moonshine Base** obtuvo un **WER de X,XX %** y un **RTF de 0,064** en GPU (unas 15 veces más rápido que el tiempo real), frente al WER de 3,23 % que reporta el artículo sobre el conjunto completo *test-clean*. En un computador personal **sin GPU**, la app transcribió una nota de voz con un **RTF de 0,111** (unas 9 veces más rápido que el tiempo real). Una prueba con un **hablante no nativo** (francófono) mostró que el modelo entiende casi toda la frase, pero es sensible al acento.
 
 ---
 
@@ -198,7 +198,8 @@ La transcripción es correcta; las diferencias son solo de formato (mayúsculas,
 | Métrica | Artículo (Moonshine Base) | Nuestra prueba |
 |---|---|---|
 | WER en LibriSpeech | 3,23 % (*test-clean*, 2.620 audios) | **X,XX %** (30 audios) |
-| Velocidad | Hasta 3× menos latencia que Whisper | **RTF = 0,064** en GPU T4 (≈ 15× más rápido que el tiempo real) |
+| Velocidad con GPU | Hasta 3× menos latencia que Whisper | **RTF = 0,064** en GPU T4 de Colab (≈ 15× más rápido que el tiempo real) |
+| Velocidad sin GPU | — | **RTF = 0,111** en CPU de un computador personal (≈ 9× más rápido que el tiempo real) |
 
 ![WER por audio](imagenes/wer_por_audio.png)
 
@@ -208,7 +209,34 @@ La transcripción es correcta; las diferencias son solo de formato (mayúsculas,
 - Nuestro WER es mayor que el del artículo porque la muestra es pequeña y de otra partición, y porque la **normalización del texto** influye ("Mr." vs. "mister").
 - El error más interesante fue **"roast beef" → "rose beef"**: dos palabras que suenan casi igual. Es un error **acústico** en el que al modelo le faltó contexto.
 
-### 6.4 Resultados reportados en el artículo
+### 6.4 Prueba propia con un hablante no nativo
+
+Se probó la app con una **nota de voz de WhatsApp** (formato .ogg, 6,69 s) grabada por un **hablante nativo de francés**, que pronunció correctamente la frase en inglés.
+
+| | Texto |
+|---|---|
+| **Frase dicha** | Hi, how are you? Did you have tickets for the game tonight? |
+| **Moonshine Base** | Hi, how are you? **I did** you have tickets for the game tonight? |
+
+| Métrica | Valor |
+|---|---|
+| Duración del audio | 6,69 s |
+| Tiempo de inferencia (CPU) | 0,742 s |
+| RTF | 0,111 |
+| Tokens generados | 20 |
+| WER | 9,09 % (1 palabra insertada de 11) |
+
+**Análisis:**
+- El modelo transcribió correctamente **casi toda la frase**, incluida la puntuación, pero **insertó la palabra "I"** ("I did you have…" en lugar de "Did you have…").
+- **Acento no nativo:** Moonshine se entrenó con unas 200.000 horas de audio en inglés, en su mayoría de hablantes nativos. Con un acento francés, algunos sonidos cambian; la pronunciación del inicio de "Did" pudo interpretarse como "I did".
+- **Audio comprimido:** las notas de voz de WhatsApp se comprimen para ocupar poco espacio, lo que elimina detalles del sonido.
+- **Tamaño del modelo:** con 61,5 M de parámetros, tiene menos capacidad para adaptarse a voces distintas de las vistas en el entrenamiento.
+- En la salida como tokens se observa el funcionamiento del decoder: el token especial de inicio **`<s>`**, el símbolo **`▁`** que marca el inicio de cada palabra y palabras partidas en **subpalabras** por el tokenizador BPE (por ejemplo, "tickets" = `▁tick` + `ets`).
+- La forma de onda muestra silencio antes de 1,5 s y después de 5 s; la voz se concentra entre 1,5 y 5 s, que es la zona donde la cross-attention enfoca su atención.
+
+![App: transcripción](imagenes/app_transcripcion.png)
+
+### 6.5 Resultados reportados en el artículo
 
 | Dataset | Whisper base.en | **Moonshine Base** |
 |---|---|---|
@@ -224,10 +252,14 @@ La transcripción es correcta; las diferencias son solo de formato (mayúsculas,
 
 *WER (%) — Tabla 2 del artículo.* Moonshine Base iguala o supera en promedio a Whisper base.en con menos parámetros (61,5 M frente a 72,6 M).
 
-### 6.5 Capturas de la aplicación
+### 6.6 Capturas de la aplicación
 
-![App: transcripción](imagenes/app_transcripcion.png)
+**Mapa de cross-attention en la app:**
+
 ![App: cross-attention](imagenes/app_cross_attention.png)
+
+**Tensores Q, K y V de la primera capa:**
+
 ![App: tensores Q, K, V](imagenes/app_qkv.png)
 
 ---
@@ -238,16 +270,20 @@ La transcripción es correcta; las diferencias son solo de formato (mayúsculas,
 - La **cross-attention** es lo que hace funcionar al Transformer encoder–decoder en tareas multimodales: Q viene del texto y K y V del audio, y su matriz muestra un alineamiento claro entre voz y palabras.
 - La **codificación posicional** no es un detalle menor: el cambio a **RoPE** es lo que permite a Moonshine procesar audios de cualquier duración sin perder precisión.
 - Un modelo pequeño bien diseñado puede igualar a uno más grande: Moonshine Base tiene un WER promedio similar al de Whisper base.en con menos parámetros y menor latencia.
+- El modelo es realmente eficiente: en un computador personal **sin GPU** transcribe unas **9 veces más rápido que el tiempo real**, lo que confirma su orientación a dispositivos de pocos recursos.
 
 **Limitaciones**
 - Solo transcribe **inglés**.
+- Es sensible a **acentos no nativos**: en nuestra prueba con un hablante francófono insertó una palabra que no se dijo.
+- La **compresión del audio** (por ejemplo, notas de voz de WhatsApp) puede afectar la precisión.
 - En **audios muy cortos** (menos de 1 segundo) tiende a repetir tokens, y en **audios largos** (más de 30 segundos) aumentan las alucinaciones.
 - Con **audio muy bajito** (por debajo de −40 dB) Whisper es más robusto.
-- Comete errores por **similitud acústica** cuando falta contexto.
+- Comete errores por **similitud acústica** cuando falta contexto ("roast beef" → "rose beef").
 - Nuestra evaluación usó una muestra pequeña de audios.
 
 **Posibles mejoras**
-- Evaluar sobre el conjunto completo de LibriSpeech *test-clean* y con audios ruidosos.
+- Evaluar sobre el conjunto completo de LibriSpeech *test-clean*, con audios ruidosos y con hablantes de distintos acentos.
+- Ajustar (*fine-tuning*) el modelo con audios de hablantes no nativos para mejorar su robustez frente a acentos.
 - Probar las versiones multilingües de Moonshine publicadas después del artículo.
 - Agregar transcripción en tiempo real (por fragmentos) en la app.
 
