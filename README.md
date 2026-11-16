@@ -34,20 +34,48 @@ Se desarrolló un notebook de análisis y una **aplicación interactiva en Strea
 
 Moonshine es un **Transformer encoder–decoder** (Vaswani et al., 2017) para la tarea **audio → texto**:
 
-```
-Audio crudo (16 kHz)
-   │
-   ▼
-Stem convolucional (3 Conv1D)  ──►  secuencia de vectores de audio   ← "embedding" del audio
-   │
-   ▼
-ENCODER  ×N  [ self-attention + RoPE → feed-forward (GELU) ]
-   │                                   (K y V para la cross-attention)
-   ▼                                              │
-DECODER  ×N  [ self-attention enmascarada + RoPE → cross-attention ◄─┘ → feed-forward (SwiGLU) ]
-   │
-   ▼
-Capa lineal + softmax  ──►  siguiente token  ──►  (se repite token por token)
+```mermaid
+flowchart TB
+    A["🎙️ Audio crudo<br/>forma de onda a 16 kHz"]
+
+    subgraph STEM["Stem convolucional · embedding del audio (comprime 384×)"]
+        direction LR
+        C1["Conv1D<br/>kernel 127 · stride 64<br/>tanh"] --> C2["Conv1D<br/>kernel 7 · stride 3<br/>GELU"] --> C3["Conv1D<br/>kernel 3 · stride 2<br/>GELU"]
+    end
+
+    subgraph ENC["ENCODER × 8 capas"]
+        direction TB
+        E1["Self-attention multi-head<br/>+ RoPE"] --> E2["Feed-forward · GELU"]
+    end
+
+    subgraph DEC["DECODER × 8 capas"]
+        direction TB
+        D1["Self-attention enmascarada<br/>+ RoPE"] --> D2["Cross-attention<br/>Q: texto · K y V: audio"] --> D3["Feed-forward · SwiGLU"]
+    end
+
+    T0["Tokens generados hasta ahora<br/>(empieza con #lt;s#gt;)"]
+    L["Capa lineal + softmax<br/>sobre el vocabulario"]
+    Y["📝 Siguiente token<br/>(texto final al llegar a #lt;/s#gt;)"]
+
+    A --> STEM
+    STEM -->|"≈ 41,7 vectores por segundo"| E1
+    E2 ==>|"K y V del audio"| D2
+    T0 -->|"Q, K y V del texto"| D1
+    D3 --> L --> Y
+    Y -.->|"generación autorregresiva:<br/>el token vuelve a entrar"| T0
+
+    style STEM fill:#FFF8E6,stroke:#F2B632,color:#141938
+    style ENC fill:#EEF0FB,stroke:#4F5BD5,color:#141938
+    style DEC fill:#E9F6F5,stroke:#2BA59A,color:#141938
+
+    classDef audio fill:#F2F3F9,stroke:#8A90A6,color:#141938
+    classDef conv fill:#F2B632,stroke:#C98F12,color:#141938
+    classDef enc fill:#4F5BD5,stroke:#3A3F63,color:#FFFFFF
+    classDef dec fill:#2BA59A,stroke:#1E7A72,color:#FFFFFF
+    class A,T0,L,Y audio
+    class C1,C2,C3 conv
+    class E1,E2 enc
+    class D1,D2,D3 dec
 ```
 
 | Parte | Detalle |
